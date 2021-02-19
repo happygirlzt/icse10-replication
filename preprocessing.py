@@ -12,12 +12,12 @@ from spacy.tokens import Doc
 from tqdm import tqdm
 
 from nltk.stem.snowball import SnowballStemmer
-stemmer = SnowballStemmer(language='english')
+stemmer = SnowballStemmer(language = 'english')
 
 class SpacyPreprocessor:
     def __init__(
         self,
-        spacy_model=None
+        spacy_model = None
     ):
 
         if not spacy_model:
