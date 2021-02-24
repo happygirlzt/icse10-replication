@@ -11,14 +11,6 @@ from tqdm import tqdm
 
 from sklearn.feature_extraction.text import CountVectorizer
 from heapq import heapify, heappush, heappop, nlargest
-from nltk.tokenize import RegexpTokenizer
-
-from nltk.stem.snowball import SnowballStemmer
-stemmer = SnowballStemmer(language = 'english')
-
-from nltk.tokenize import sent_tokenize, word_tokenize
-from nltk.corpus import stopwords
-stop_words = set(stopwords.words('english'))
 
 from collections import Counter
 import math
@@ -31,102 +23,19 @@ from sklearn.svm import SVC
 from pathlib import Path
 import string
 
-import ast
+import logging
+logging.basicConfig(
+    handlers = [logging.FileHandler(filename = './train.log', 
+                                    encoding='utf-8',
+                                    mode='a+')],
+                    format = '%(asctime)s %(name)s:%(levelname)s:%(message)s', 
+                    datefmt = '%F %A %T', 
+                    level = logging.INFO)
+
+from config import *
 
 clf = make_pipeline(StandardScaler(), SVC(gamma='auto'))
 num_features = 54
-
-
-def preprocess(original_text):
-    """
-    Preprocessing on one single cell (report)
-    """
-    # lowercase
-    text = original_text.lower()
-    # 1. tokenize
-    tokenized_words = word_tokenize(original_text)
-    
-    # 2. remove punctuation
-    table = str.maketrans('', '', string.punctuation)
-    stripped_words = [w.translate(table) for w in tokenized_words]
-
-    # 3. remove stop words
-    filtered_report = []
-    for word in stripped_words:
-        if word not in stop_words:
-            filtered_report.append(word)
-    
-    # 4. stemming
-    stemmed_words = []
-    for word in filtered_report:
-        if len(word) > 0:
-            stemmed_words.append(stemmer.stem(word))
-
-    return stemmed_words
-
-
-def preprocess_all(new_data):
-    """
-    Apply the preprocessing function on all reports
-    """
-    data_df = pd.read_csv(processed_file)
-    tqdm.pandas()
-
-    # data_df = pd.read_csv(new_data)
-    # data_df['short_desc'] = data_df['short_desc'].astype('str')
-    # data_df['desc'] = data_df['desc'].astype('str')
-    # data_df['both'] = data_df['both'].astype('str')
-
-    # processed_df = pd.DataFrame({
-    #     'short_desc_token': data_df['short_desc'].progress_apply(preprocess),
-    #     'desc_token': data_df['desc'].progress_apply(preprocess),
-    #     'both_token': data_df['both'].progress_apply(preprocess)
-    # })
-    # processed_df.to_csv(processed_file, index = False)
-
-    # convert string to list
-    data_df['desc_token'] = data_df['desc_token'].progress_apply(ast.literal_eval)
-    data_df['short_desc_token'] = data_df['short_desc_token'].progress_apply(ast.literal_eval)
-    data_df['both_token'] = data_df['both_token'].progress_apply(ast.literal_eval)
-
-    ngram_df = pd.DataFrame({
-        'one_short_desc' : data_df['short_desc_token'].progress_apply(extract_1_gram),
-        'one_desc' : data_df['desc_token'].progress_apply(extract_1_gram),
-        'one_both' : data_df['both_token'].progress_apply(extract_1_gram),
-        'bi_short_desc' : data_df['short_desc_token'].progress_apply(extract_bigrams),
-        'bi_desc' : data_df['desc_token'].progress_apply(extract_bigrams),
-        'bi_both' : data_df['both_token'].progress_apply(extract_bigrams)
-    })
-    ngram_df.to_csv(ngram_file, index = False)
-
-    print('finished')
-
-
-def extract_bigrams(token_list):
-    # terms = token_list[1:-1].split(',')
-    bigram_features = set()
-
-    # 'hi', 'what', 'do' len = 3
-    # 0 + 2, 1 + 2
-    for i in range(len(token_list) - 1):
-        # 'hi what'
-        bigram_features.add(token_list[i] + ' ' + token_list[i + 1])
-
-    return bigram_features
-
-    
-def extract_1_gram(token_list):
-    """
-    Extract 1-gram in a bug report text part
-    """
-
-    features = set()
-
-    for term in token_list:
-        if len(term) > 0:
-            features.add(term)    
-
-    return features
 
 
 def calculate_similarity(corpus, term_corpus):
@@ -136,13 +45,11 @@ def calculate_similarity(corpus, term_corpus):
     term_corpus: one gram and bigrams in the two bug reports
     """
 
-    N = len(corpus) # total number of reports
+    N = corpus.shape[0] # total number of reports
     term_counter = Counter()
 
-    for report in corpus:
-        one_gram_features = extract_1_gram(report)
-        bigram_features = extract_bigrams(report)
-        total_features = one_gram_features.union(bigram_features)
+    for index, value in corpus.items():
+        total_features = value
 
         for term in term_corpus:
             if term in total_features:
@@ -150,16 +57,12 @@ def calculate_similarity(corpus, term_corpus):
 
     similarity = 0
     # idf = log(num_documents / num_documents_contain_term + 1)
-    for (term, term_frequency) in term_counter.items():
+    for term, term_frequency in term_counter.items():
         term_IDF = math.log(float(N) / (term_frequency + 1))
         similarity += term_IDF
     return similarity
 
-    
-def generate_buckets():
-    # TODO
-    pass
-    
+
 
 def extract_text(bug_id, df, is_one):
     """
@@ -167,34 +70,17 @@ def extract_text(bug_id, df, is_one):
     """
 
     row = df.loc[df['bug_id'] == int(bug_id)].iloc[0]
+
     if is_one:
-        short_desc =  ast.literal_eval(row.one_short_desc)
-        description =  ast.literal_eval(row.one_desc)
-        both = ast.literal_eval(row.one_both)
+        short_desc = row.one_short_desc
+        description = row.one_desc
+        both = row.one_both
         return [short_desc, description, both]
     else:
-        short_desc = ast.literal_eval(row.bi_short_desc)
-        description = ast.literal_eval(row.bi_desc)
-        both = ast.literal_eval(row.bi_both)
+        short_desc = row.bi_short_desc
+        description = row.bi_desc
+        both = row.bi_both
         return [short_desc, description, both]
-
-
-def build_corpus(data_df):
-    # df['short_desc'].astype(str) + ...
-    # data_df = data_df.replace('"','', regex = True)
-
-    data_df = data_df.fillna('')
-    # check NAN first
-    # data_df.loc[data_df['desc'].isnull(), 'desc'] = ''
-    # data_df.loc[data_df['short_desc'].isnull(), 'short_desc'] = ''
-    data_df.to_csv(data_file, index = False, na_rep = '')
-
-
-    data_df['both'] = data_df['short_desc'] + ' ' + data_df['desc']
-    # data_df.loc[data_df['both'].isnull(), 'both'] = ''
-
-    # return data_df['short_desc'], data_df['desc'], data_df['both']
-    data_df.to_csv(new_data_file, index = False, na_rep = '')
 
 
 def generate_features(report_1_id, report_2_id, data_df):
@@ -206,35 +92,32 @@ def generate_features(report_1_id, report_2_id, data_df):
     feature_vec_idx = 0
 
     # 1-gram
-    for text_1 in extract_text(report_1_id, data_df, true):
-        bag_1 = extract_1_gram(text_1)
+    for bag_1 in extract_text(report_1_id, data_df, True):
+        for bag_2 in extract_text(report_2_id, data_df, True):
 
-        for text_2 in extract_text(report_2_id, data_df, false):
-
-            bag_2 = extract_1_gram(text_2)
             term_corpus = bag_1.union(bag_2)
 
-            for corpus in [data_df['short_desc'], data_df['description'], data_df['both']]:
+            print('     iterate on 3 typs of corpus ' + '=' * 10)
+            for corpus in [short_desc_df['one_short_desc'], desc_df['one_desc'], both_df['one_both']]:
+                # print('         starting calculate similarity ' + '=' * 10)
                 similarity = calculate_similarity(corpus, term_corpus)
-
+                print('         {} features'.format(feature_vec_idx) + '=' * 10)
                 feature_vectors[feature_vec_idx] = similarity
                 feature_vec_idx += 1
 
     # bigrams
-    for text_1 in extract_text(report_1_id, data, true):
-        bag_1 = extract_bigrams(text_1)
+    for bag_1 in extract_text(report_1_id, data_df, False):
+        for bag_2 in extract_text(report_2_id, data_df, False):
 
-        for text_2 in extract_text(report_2_id, data_df, false):
-
-            bag_2 = extract_bigrams(text_2)
             term_corpus = bag_1.union(bag_2)
 
-            for corpus in [data_df['short_desc'], data_df['description'], data_df['both']]:
+            for corpus in [short_desc_df['bi_short_desc'], desc_df['bi_desc'], both_df['bi_both']]:
                 similarity = calculate_similarity(corpus, term_corpus)
-
+                print('         {} features'.format(feature_vec_idx) + '=' * 10)
                 feature_vectors[feature_vec_idx] = similarity
                 feature_vec_idx += 1
 
+    print(feature_vectors)
     return feature_vectors
 
 
@@ -242,49 +125,63 @@ def generate_train_X_y(positive_samples, negative_samples):
     """
     Generate all positive and negative samples features
     """
+
     num_samples = len(positive_samples) + len(negative_samples)
+    # ngram_df = pd.read_csv(ngram_file)
+    ngram_df = pd.read_pickle(ngram_pickle)
+
     X = np.zeros((num_samples, num_features))
     y = np.zeros((num_samples, 1), dtype = int)
 
     col_idx = 0
+    
+    logging.basicConfig(format = '%(asctime)s %(message)s')
+    logging.info('Generating positive samples ' + '=' * 20)
 
-    for report_1, report_2 in positive_samples:
-        X[:, col_idx] = generate_features(report_1, report_2)
+    for sample in tqdm(positive_samples):
+        print('calculating a postive sample ' + '=' * 10)
+        report_1, report_2 = int(sample[0]), int(sample[1])
+        X[col_idx, ] = generate_features(report_1, report_2, ngram_df)
         y[col_idx] = 1
         col_idx += 1
 
-    for report_1, report_2 in negative_samples:
-        X[:, col_idx] = generate_features(report_1, report_2)
-        y[:, col_idx] = 0
+    logging.basicConfig(format = '%(asctime)s %(message)s')
+    logging.info('Generating negative samples ' + '=' * 20)
+    for sample in tqdm(negative_samples):
+        report_1, report_2 = int(sample[0]), int(sample[1])
+        X[col_idx, ] = generate_features(report_1, report_2, ngram_df)
+        y[col_idx] = 0
         col_idx += 1
+
+    with open(X_file, 'wb') as handler:
+        pickle.dump(X, handler)
+
+    with open(y_file, 'wb') as handler:
+        pickle.dump(y, handler)
 
     return X, y
 
 
 if __name__ == '__main__':
-    data_file = '/media/zt/dbrd/dataset/open_office_2001-2008_2010/generated/data.csv'
-    new_data_file = '/media/zt/dbrd/dataset/open_office_2001-2008_2010/generated/new_data.csv'
-    processed_file = '/media/zt/dbrd/dataset/open_office_2001-2008_2010/generated/processed_data.csv'
-    ngram_file = '/media/zt/dbrd/dataset/open_office_2001-2008_2010/generated/ngram_data.csv'
 
-    data = pd.read_csv(data_file)
+    data = pd.read_csv(ngram_file)
+
     # should I use the whole corpus or just training data?
 
-    summary_corpus = data['short_desc']
-    # short_desc,desc
-    description_corpus = data['desc']
+    with open(short_desc_corpus, 'rb') as handler:
+        short_desc_df = pickle.load(handler)
 
-    if not Path(new_data_file).is_file():
-        build_corpus(data)
-    
-    preprocess_all(new_data_file)
+    with open(desc_corpus, 'rb') as handler:
+        desc_df = pickle.load(handler)
 
-    # buckets = generate_buckets()
+    with open(both_corpus, 'rb') as handler:
+        both_df = pickle.load(handler)
 
-    # # 1/ preprocess
-    # # 2/ 
+    with open(positive_samples_file, 'rb') as handler:
+        positive_pairs = pickle.load(handler)
 
-    # generate_train_X_y()
-    # clf.fit(X, y)
+    with open(negative_samples_file, 'rb') as handler:
+        negative_pairs = pickle.load(handler)
 
-    # s = pickle.dumps(clf)
+    if not Path(X_file).is_file() or not Path(y_file).is_file():
+        generate_train_X_y(positive_pairs, negative_pairs)
