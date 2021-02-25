@@ -5,6 +5,7 @@ Date: 18th Feb 2021
 Feature extractor and training a SVM classifier
 """
 
+from config import *
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -25,14 +26,13 @@ import string
 
 import logging
 logging.basicConfig(
-    handlers = [logging.FileHandler(filename = './train.log', 
-                                    encoding='utf-8',
-                                    mode='a+')],
-                    format = '%(asctime)s %(name)s:%(levelname)s:%(message)s', 
-                    datefmt = '%F %A %T', 
-                    level = logging.INFO)
+    handlers=[logging.FileHandler(filename='./train.log',
+                                  encoding='utf-8',
+                                  mode='a+')],
+    format='%(asctime)s %(name)s:%(levelname)s:%(message)s',
+    datefmt='%F %A %T',
+    level=logging.INFO)
 
-from config import *
 
 clf = make_pipeline(StandardScaler(), SVC(gamma='auto'))
 num_features = 54
@@ -45,7 +45,7 @@ def calculate_similarity(corpus, term_corpus):
     term_corpus: one gram and bigrams in the two bug reports
     """
 
-    N = corpus.shape[0] # total number of reports
+    N = corpus.shape[0]  # total number of reports
     term_counter = Counter()
 
     for index, value in corpus.items():
@@ -61,7 +61,6 @@ def calculate_similarity(corpus, term_corpus):
         term_IDF = math.log(float(N) / (term_frequency + 1))
         similarity += term_IDF
     return similarity
-
 
 
 def extract_text(bug_id, df, is_one):
@@ -98,10 +97,11 @@ def generate_features(report_1_id, report_2_id, data_df):
             term_corpus = bag_1.union(bag_2)
 
             print('     iterate on 3 typs of corpus ' + '=' * 10)
-            for corpus in [short_desc_df['one_short_desc'], desc_df['one_desc'], both_df['one_both']]:
+            for corpus in [short_desc_df['one_short_desc'], desc_df['one_desc', both_df['one_both']]:
                 # print('         starting calculate similarity ' + '=' * 10)
                 similarity = calculate_similarity(corpus, term_corpus)
-                print('         {} features'.format(feature_vec_idx) + '=' * 10)
+                print('         {} features'.format(
+                    feature_vec_idx) + '=' * 10)
                 feature_vectors[feature_vec_idx] = similarity
                 feature_vec_idx += 1
 
@@ -113,7 +113,8 @@ def generate_features(report_1_id, report_2_id, data_df):
 
             for corpus in [short_desc_df['bi_short_desc'], desc_df['bi_desc'], both_df['bi_both']]:
                 similarity = calculate_similarity(corpus, term_corpus)
-                print('         {} features'.format(feature_vec_idx) + '=' * 10)
+                print('         {} features'.format(
+                    feature_vec_idx) + '=' * 10)
                 feature_vectors[feature_vec_idx] = similarity
                 feature_vec_idx += 1
 
@@ -131,11 +132,11 @@ def generate_train_X_y(positive_samples, negative_samples):
     ngram_df = pd.read_pickle(ngram_pickle)
 
     X = np.zeros((num_samples, num_features))
-    y = np.zeros((num_samples, 1), dtype = int)
+    y = np.zeros((num_samples, 1), dtype=int)
 
     col_idx = 0
-    
-    logging.basicConfig(format = '%(asctime)s %(message)s')
+
+    logging.basicConfig(format='%(asctime)s %(message)s')
     logging.info('Generating positive samples ' + '=' * 20)
 
     for sample in tqdm(positive_samples):
@@ -145,7 +146,7 @@ def generate_train_X_y(positive_samples, negative_samples):
         y[col_idx] = 1
         col_idx += 1
 
-    logging.basicConfig(format = '%(asctime)s %(message)s')
+    logging.basicConfig(format='%(asctime)s %(message)s')
     logging.info('Generating negative samples ' + '=' * 20)
     for sample in tqdm(negative_samples):
         report_1, report_2 = int(sample[0]), int(sample[1])
